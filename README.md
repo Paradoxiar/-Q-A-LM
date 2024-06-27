@@ -129,21 +129,21 @@ def display_nearest_neighbors(query_text, answer_text=None):
 
   if answer_text:
   
-    result_md = '''
+   result_md = '''
     
-    <p>Random Question from SQuAD:</p>
+  <p>Random Question from SQuAD:</p>
     
-    <p>&nbsp;&nbsp;<b>%s</b></p>
+  <p>&nbsp;&nbsp;<b>%s</b></p>
     
-    <p>Answer:</p>
+  <p>Answer:</p>
     
-    <p>&nbsp;&nbsp;<b>%s</b></p>
+  <p>&nbsp;&nbsp;<b>%s</b></p>
     
-    ''' % (query_text , answer_text)
+   ''' % (query_text , answer_text)
     
   else:
   
-    result_md = '''
+  result_md = '''
     
     <p>Question:</p>
     
@@ -176,13 +176,87 @@ def display_nearest_neighbors(query_text, answer_text=None):
   
   display(HTML(result_md))
 
-该函数使用TensorFlow模型对查询文本进行编码，并在索引中查找最相似的句子。query_embedding 获取查询文本的嵌入表示。index.nearest(query_embedding, n=num_results) 查找最相似的句子。生成HTML格式的结果，并使用 IPython.display.display 函数显示结果。如果提供了答案文本，则在结果中高亮显示答案。
+函数使用TensorFlow模型对查询文本进行编码，并在索引中查找最相似的句子。query_embedding 获取查询文本的嵌入表示。index.nearest(query_embedding, n=num_results) 查找最相似的句子。生成HTML格式的结果，并使用 IPython.display.display 函数显示结果。如果提供了答案文本，则在结果中高亮显示答案。
 
+module_url = "https://tfhub.dev/google/universal-sentence-encoder-multilingual-qa/3"
 
+model = hub.load(module_url)
 
+module_url 是预训练的多语言问答模型在TensorFlow Hub上的URL。
+hub.load(module_url) 从该URL加载模型。
 
+batch_size = 100
 
+encodings = model.signatures['response_encoder'](
 
+  input=tf.constant([sentences[0][0]]),
+  
+  context=tf.constant([sentences[0][1]]))
+  
+index = simpleneighbors.SimpleNeighbors(
 
+   len(encodings['outputs'][0]), metric='angular')
 
+batch_size 定义了每批次处理的句子数量。使用模型的 response_encoder 签名计算第一个句子的嵌入向量，作为初始化。创建一个 SimpleNeighbors 索引，使用 angular 距离度量（即余弦相似度），并根据嵌入向量的维度初始化索引。
+
+print('Computing embeddings for %s sentences' % len(sentences))
+
+slices = zip(*(iter(sentences),) * batch_size)
+
+num_batches = int(len(sentences) / batch_size)
+
+for s in tqdm(slices, total=num_batches):
+
+  response_batch = list([r for r, c in s])
+  
+  context_batch = list([c for r, c in s])
+  
+  encodings = model.signatures['response_encoder'](
+  
+    
+  input=tf.constant(response_batch),
+  
+  context=tf.constant(context_batch)
+  )
+  for batch_index, batch in enumerate(response_batch):
+  
+  index.add_one(batch, encodings['outputs'][batch_index])
+
+index.build()
+
+print('simpleneighbors index for %s sentences built.' % len(sentences))
+
+print 打印计算句子嵌入向量的消息。
+
+slices 将句子分成每 batch_size 一组的小批次。
+
+num_batches 计算总批次数量。
+
+使用 tqdm 显示处理进度条。
+
+对每个小批次的句子进行如下处理：
+
+将句子和上下文分开存储在 response_batch 和 context_batch 列表中。
+
+使用模型计算这些句子的嵌入向量。
+
+将每个句子及其对应的嵌入向量添加到 SimpleNeighbors 索引中。
+
+最后，构建 SimpleNeighbors 索引，并打印索引构建完成的消息。
+
+num_results = 25
+
+query = random.choice(questions)
+
+display_nearest_neighbors(query[0], query[1])
+
+num_results 定义了查找的最近邻居的数量。
+
+从问题列表中随机抽取一个问题。
+
+调用 display_nearest_neighbors 函数，显示该问题的最近邻居，并高亮显示其答案。
+
+额外说明
+
+SimpleNeighbors 是一个快速近邻搜索的Python库，使用近似最近邻算法来加速高维空间中的搜索。代码使用 Universal Sentence Encoder Multilingual QA 模型来生成句子的嵌入向量，这些嵌入向量可以用于各种自然语言处理任务，如问答和句子相似度计算。display_nearest_neighbors 函数定义在之前的代码段中，它负责在Jupyter Notebook中以HTML格式显示查询结果。
 
